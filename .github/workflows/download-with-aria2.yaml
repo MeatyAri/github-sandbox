@@ -33,99 +33,10 @@ jobs:
         env:
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
 
-      - name: Download bunkr module
+      - name: Setup scripts
         run: |
-          cat << 'EOF' > bunkr.py
-          import os
-          import sys
-          import json
-          import time
-          import base64
-          import requests
-          from math import floor
-          from itertools import cycle
-          from urllib.parse import urlparse
-
-          BUNKRR_API = "https://bunkr.cr/api/vs"
-          BUNKRR_DOMAINS = ("bunkr.si", "bunkr.fi", "bunkr.ru", "bunkr.cr", "bunkr.rip", "bunkrr.su")
-          BUNKRR_DOWNLOAD_HEADERS = {
-              "User-Agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:136.0) Gecko/20100101 Firefox/136.0",
-              "Referer": "https://get.bunkrr.su/",
-              "Connection": "keep-alive",
-          }
-          _offline_subs = set()
-
-          def is_bunkr_url(url: str) -> bool:
-              return any(domain in url for domain in BUNKRR_DOMAINS)
-
-          def get_slug(url: str) -> str:
-              match = __import__("re").search(r"/([a-zA-Z0-9_-]+)$", url)
-              return match.group(1) if match else None
-
-          def fetch_bunkr_api(url: str) -> dict | None:
-              slug = get_slug(url)
-              if not slug:
-                  return None
-              payload = {"slug": slug}
-              for dom in (BUNKRR_API.split("/")[2], *_offline_subs):
-                  try:
-                      api_url = f"https://{dom}/api/vs"
-                      resp = requests.post(api_url, json=payload, headers=BUNKRR_DOWNLOAD_HEADERS, timeout=30)
-                      if resp.status_code == 200:
-                          return resp.json()
-                      if resp.status_code == 502:
-                          _offline_subs.add(dom)
-                  except Exception:
-                      continue
-              return None
-
-          def decrypt_url(api_resp: dict) -> str | None:
-              try:
-                  timestamp = api_resp["timestamp"]
-                  encrypted_bytes = base64.b64decode(api_resp["url"])
-                  time_key = floor(timestamp / 3600)
-                  secret_key = f"SECRET_KEY_{time_key}"
-                  secret_key_bytes = secret_key.encode("utf-8")
-                  cycled_key = cycle(secret_key_bytes)
-                  decrypted_bytes = bytearray(b ^ next(cycled_key) for b in encrypted_bytes)
-                  return decrypted_bytes.decode("utf-8", errors="ignore")
-              except Exception:
-                  return None
-
-          def download_bunkr(url: str, outdir: str):
-              api_resp = fetch_bunkr_api(url)
-              if not api_resp:
-                  print("ERROR: Failed to fetch Bunkr API", file=sys.stderr)
-                  sys.exit(1)
-              download_link = decrypt_url(api_resp)
-              if not download_link:
-                  print("ERROR: Failed to decrypt URL", file=sys.stderr)
-                  sys.exit(1)
-              parsed = urlparse(download_link)
-              filename = parsed.path.rstrip("/").split("/")[-1]
-              filepath = os.path.join(outdir, filename)
-              resp = requests.get(download_link, headers=BUNKRR_DOWNLOAD_HEADERS, stream=True, timeout=120)
-              if resp.status_code != 200:
-                  print(f"ERROR: HTTP {resp.status_code}", file=sys.stderr)
-                  sys.exit(1)
-              total = int(resp.headers.get("Content-Length", 0))
-              downloaded = 0
-              with open(filepath, "wb") as f:
-                  for chunk in resp.iter_content(chunk_size=8192):
-                      if chunk:
-                          f.write(chunk)
-                          downloaded += len(chunk)
-                          if total > 0:
-                              pct = int(downloaded * 100 / total)
-                              print(f"PROGRESS:{pct}", file=sys.stderr)
-              print(f"DONE:{filepath}")
-
-          if __name__ == "__main__":
-              url = sys.argv[1]
-              outdir = sys.argv[2] if len(sys.argv) > 2 else "."
-              if is_bunkr_url(url):
-                  download_bunkr(url, outdir)
-          EOF
+          mkdir -p scripts
+          cp -r ${{ github.server_url }}/${{ github.repository }}/scripts scripts/ || true
 
       - name: Extract URLs and download files
         shell: bash
@@ -151,19 +62,20 @@ jobs:
             echo "Processing: $URL"
 
             if echo "$URL" | grep -qE "(bunkr\.si|bunkr\.fi|bunkr\.ru|bunkr\.cr|bunkr\.rip|bunkrr\.su)"; then
-              echo "⬇️ Downloading Bunkr: $URL"
-              python3 bunkr.py "$URL" "tmp_downloads"
+              echo "Downloading Bunkr: $URL"
+              python3 scripts/bunkr.py "$URL" "tmp_downloads"
 
             elif echo "$URL" | grep -qE "(youtube\.com|youtu\.be|twitch\.tv|reddit\.com|ni长沙|pexels|soundcloud)"; then
-              echo "⬇️ Downloading with yt-dlp: $URL"
+              echo "Downloading with yt-dlp: $URL"
               yt-dlp --js-runtimes bun:/home/runner/.bun/bin --cookies youtube_cookies.txt -o "tmp_downloads/%(title)s.%(ext)s" "$URL"
 
             else
-              echo "⬇️ Downloading with aria2: $URL"
+              echo "Downloading with aria2: $URL"
               aria2c \
                 --split=2 \
                 --max-connection-per-server=2 \
                 --min-split-size=90M \
+                --summary-interval=2 \
                 --dir="tmp_downloads" \
                 "$URL"
             fi
@@ -181,9 +93,9 @@ jobs:
             BASENAME=$(basename "$FILE")
 
             if [ "$SIZE" -gt "$LIMIT" ]; then
-              echo "✂️ $BASENAME is $(( SIZE / 1024 / 1024 ))MB — splitting with zip..."
+              echo "Splitting: $BASENAME ($(( SIZE / 1024 / 1024 ))MB)"
               zip -s 90m "downloads/${BASENAME}.zip" -j "$FILE"
-              echo "✅ Parts: $(ls downloads/${BASENAME}* | wc -l)"
+              echo "Parts: $(ls downloads/${BASENAME}* | wc -l)"
             else
               cp "$FILE" "downloads/$BASENAME"
             fi
