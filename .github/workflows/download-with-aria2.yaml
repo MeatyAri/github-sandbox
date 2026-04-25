@@ -18,7 +18,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y aria2 python3 python3-pip python3-requests ffmpeg curl unzip
-          pip3 install yt-dlp
+          pip3 install "yt-dlp[default]"
 
       - name: Install bun
         run: |
@@ -156,7 +156,15 @@ jobs:
 
             elif echo "$URL" | grep -qE "(youtube\.com|youtu\.be|twitch\.tv|reddit\.com|ni长沙|pexels|soundcloud)"; then
               echo "⬇️ Downloading with yt-dlp: $URL"
-              yt-dlp --cookies youtube_cookies.txt -o "tmp_downloads/%(title)s.%(ext)s" "$URL"
+              echo "=== DEBUG: Checking bun ==="
+              bun --version || echo "bun not found"
+              echo "BUN_PATH: $(which bun 2>/dev/null || echo 'not in PATH')"
+
+              echo "=== DEBUG: Checking yt-dlp version ==="
+              yt-dlp --version
+
+              echo "=== DEBUG: yt-dlp verbose output ==="
+              yt-dlp --verbose --cookies youtube_cookies.txt -o "tmp_downloads/%(title)s.%(ext)s" "$URL"
 
             else
               echo "⬇️ Downloading with aria2: $URL"
