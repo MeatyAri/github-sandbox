@@ -18,7 +18,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y aria2 python3 python3-pip python3-requests ffmpeg curl pigz zstd
-          pip3 install "yt-dlp[default]"
+          curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp
+          chmod +x /usr/local/bin/yt-dlp
 
       - name: Install bun
         run: |
@@ -32,6 +33,27 @@ jobs:
           echo '${{ secrets.YOUTUBE_COOKIES }}' > youtube_cookies.txt
         env:
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+
+      - name: Setup Twitch cookies
+        if: success()
+        run: |
+          echo '${{ secrets.TWITCH_COOKIES }}' > twitch_cookies.txt
+        env:
+          TWITCH_COOKIES: ${{ secrets.TWITCH_COOKIES }}
+
+      - name: Setup Reddit cookies
+        if: success()
+        run: |
+          echo '${{ secrets.REDDIT_COOKIES }}' > reddit_cookies.txt
+        env:
+          REDDIT_COOKIES: ${{ secrets.REDDIT_COOKIES }}
+
+      - name: Setup SoundCloud cookies
+        if: success()
+        run: |
+          echo '${{ secrets.SOUNDCLOUD_COOKIES }}' > soundcloud_cookies.txt
+        env:
+          SOUNDCLOUD_COOKIES: ${{ secrets.SOUNDCLOUD_COOKIES }}
 
       - name: Setup scripts
         run: |
@@ -65,19 +87,48 @@ jobs:
               echo "Downloading Bunkr: $URL"
               python3 scripts/bunkr.py "$URL" "tmp_downloads"
 
-            elif echo "$URL" | grep -qE "(youtube\.com|youtu\.be|twitch\.tv|reddit\.com|ni长沙|pexels|soundcloud)"; then
-              echo "Downloading with yt-dlp: $URL"
+            elif echo "$URL" | grep -qE "youtube\.com|youtu\.be"; then
+              echo "Downloading YouTube: $URL"
               yt-dlp -q --no-warnings --js-runtimes bun:/home/runner/.bun/bin --cookies youtube_cookies.txt -o "tmp_downloads/%(title)s.%(ext)s" "$URL"
 
+            elif echo "$URL" | grep -qE "twitch\.tv"; then
+              echo "Downloading Twitch: $URL"
+              yt-dlp -q --no-warnings --js-runtimes bun:/home/runner/.bun/bin --cookies twitch_cookies.txt -o "tmp_downloads/%(title)s.%(ext)s" "$URL"
+
+            elif echo "$URL" | grep -qE "reddit\.com"; then
+              echo "Downloading Reddit: $URL"
+              yt-dlp -q --no-warnings --js-runtimes bun:/home/runner/.bun/bin --cookies reddit_cookies.txt -o "tmp_downloads/%(title)s.%(ext)s" "$URL"
+
+            elif echo "$URL" | grep -qE "soundcloud"; then
+              echo "Downloading SoundCloud: $URL"
+              yt-dlp -q --no-warnings --js-runtimes bun:/home/runner/.bun/bin --cookies soundcloud_cookies.txt -o "tmp_downloads/%(title)s.%(ext)s" "$URL"
+
+            elif echo "$URL" | grep -qE "pexels"; then
+              echo "Downloading Pexels: $URL"
+              yt-dlp -q --no-warnings -o "tmp_downloads/%(title)s.%(ext)s" "$URL"
+
+            elif echo "$URL" | grep -qE "podcasts\.apple\.com"; then
+              echo "Downloading Apple Podcasts: $URL"
+              yt-dlp -q --no-warnings -o "tmp_downloads/%(title)s.%(ext)s" "$URL"
+
+            elif echo "$URL" | grep -qE "rumble\.com|odysee\.com|bitchute\.com|bandcamp\.com"; then
+              echo "Downloading video platform: $URL"
+              yt-dlp -q --no-warnings -o "tmp_downloads/%(title)s.%(ext)s" "$URL"
+
             else
-              echo "Downloading with aria2: $URL"
-              aria2c \
-                --split=2 \
-                --max-connection-per-server=2 \
-                --min-split-size=90M \
-                --summary-interval=2 \
-                --dir="tmp_downloads" \
-                "$URL"
+              echo "Trying basic yt-dlp: $URL"
+              if yt-dlp -q --no-warnings -o "tmp_downloads/%(title)s.%(ext)s" "$URL" 2>/dev/null; then
+                echo "yt-dlp succeeded"
+              else
+                echo "Downloading with aria2: $URL"
+                aria2c \
+                  --split=2 \
+                  --max-connection-per-server=2 \
+                  --min-split-size=90M \
+                  --summary-interval=2 \
+                  --dir="tmp_downloads" \
+                  "$URL"
+              fi
             fi
           done
 
