@@ -95,7 +95,7 @@ jobs:
             if [ "$SIZE" -gt "$LIMIT" ]; then
               echo "Splitting: $BASENAME ($(( SIZE / 1024 / 1024 ))MB)"
               split -b 90M "$FILE" "downloads/${BASENAME}.part_"
-              echo "Parts: $(ls downloads/${BASENAME}.part_* | wc -l)"
+              echo "Parts: $(ls "downloads/${BASENAME}.part_"* 2>/dev/null | wc -l)"
             else
               cp "$FILE" "downloads/$BASENAME"
             fi
@@ -110,8 +110,8 @@ jobs:
           git config user.email "github-actions@github.com"
 
           cd downloads
-          ALL_FILES=$(find . -type f | sort)
-          FILE_COUNT=$(echo "$ALL_FILES" | wc -l)
+
+          FILE_COUNT=$(find . -type f | wc -l)
           echo "Total files to push: $FILE_COUNT"
 
           BATCH_SIZE=10
@@ -121,12 +121,12 @@ jobs:
 
           > /tmp/batch_files.txt
 
-          for FILE in $ALL_FILES; do
+          find . -type f -print0 | sort -z | while IFS= read -r -d '' FILE; do
             BATCH_NUM=$((BATCH_NUM + 1))
-            echo "$FILE" >> /tmp/batch_files.txt
+            printf '%s\0' "$FILE" >> /tmp/batch_files.txt
 
             if [ $((BATCH_NUM % BATCH_SIZE)) -eq 0 ] || [ $BATCH_NUM -eq "$FILE_COUNT" ]; then
-              git add -f $(cat /tmp/batch_files.txt)
+              xargs -0 git add -f < /tmp/batch_files.txt
               git commit -m "Add downloaded files (batch $CURRENT_BATCH/$TOTAL_BATCHES) [skip ci]" || echo "Nothing to commit"
               echo "🚀 Pushing batch $CURRENT_BATCH/$TOTAL_BATCHES..."
               git push origin HEAD:$BRANCH || true
