@@ -119,7 +119,7 @@ jobs:
             done < /tmp/ollama_links.txt
             ls -la tmp_downloads/
 
-            ARCHIVE_NAME="tmp_downloads/archive_$(date +%Y%m%d_%H%M%S).tar.gz"
+            ARCHIVE_NAME="/tmp/archive_$(date +%Y%m%d_%H%M%S).tar.gz"
             tar -cvf - -C tmp_downloads . | pigz -k > "$ARCHIVE_NAME"
             cp "$ARCHIVE_NAME" "downloads/"
             rm -f "$ARCHIVE_NAME"
@@ -184,7 +184,7 @@ jobs:
           fi
 
           if [ "$MODE" = "zip" ]; then
-              ARCHIVE_NAME="tmp_downloads/archive_$(date +%Y%m%d_%H%M%S).tar.gz"
+              ARCHIVE_NAME="/tmp/archive_$(date +%Y%m%d_%H%M%S).tar.gz"
               tar -cvf - -C tmp_downloads . | pigz -k > "$ARCHIVE_NAME"
               cp "$ARCHIVE_NAME" "downloads/"
               rm -f "$ARCHIVE_NAME"
