@@ -21,6 +21,8 @@ jobs:
           sudo apt-get install -y aria2 python3 python3-pip python3-requests ffmpeg curl pigz zstd
           curl -sL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp
           chmod +x /usr/local/bin/yt-dlp
+          curl -sL https://github.com/amirrezaDev1378/ollama-model-direct-download/releases/download/v2.1.1/omdd-linux-amd64 -o /usr/local/bin/omdd
+          chmod +x /usr/local/bin/omdd
 
       - name: Install bun
         run: |
@@ -70,6 +72,9 @@ jobs:
           if echo "$MSG" | grep -qP 'download-zip:'; then
             MODE="zip"
             URL_LINE=$(echo "$MSG" | grep -oP 'download-zip:\s*\K.*')
+          elif echo "$MSG" | grep -qP 'ollama:'; then
+            MODE="ollama"
+            OLLAMA_MODEL=$(echo "$MSG" | grep -oP 'ollama:\s*\K.*')
           elif echo "$MSG" | grep -qP 'download:'; then
             MODE="normal"
             URL_LINE=$(echo "$MSG" | grep -oP 'download:\s*\K.*')
@@ -81,6 +86,36 @@ jobs:
           echo "Mode: $MODE"
           mkdir -p downloads tmp_downloads
 
+          if [ "$MODE" = "ollama" ]; then
+            echo "Getting Ollama direct links: $OLLAMA_MODEL"
+            omdd get $OLLAMA_MODEL > /tmp/ollama_links.txt
+            echo "=== DEBUG: Links file contents ==="
+            cat /tmp/ollama_links.txt
+            echo "=== DEBUG: Line count ==="
+            wc -l /tmp/ollama_links.txt
+
+            while IFS= read -r LINE || [ -n "$LINE" ]; do
+              echo "DEBUG: Read line: [$LINE]"
+              URL=$(echo "$LINE" | grep -oP 'https://\S+' | head -1)
+              [[ -z "$URL" ]] && { echo "Skipping - no URL found"; continue; }
+              FILENAME=$(basename "$URL")
+              echo "Downloading: $URL -> $FILENAME"
+              aria2c \
+                --console-log-level=notice \
+                --summary-interval=10 \
+                --dir="tmp_downloads" \
+                --out "$FILENAME" \
+                --header="Accept: application/vnd.docker.distribution.manifest.v2+json" \
+                "$URL"
+              EXIT_CODE=$?
+              if [ $EXIT_CODE -ne 0 ]; then
+                echo "aria2c failed with code $EXIT_CODE"
+                ls -la tmp_downloads/
+                exit 1
+              fi
+            done < /tmp/ollama_links.txt
+            ls -la tmp_downloads/
+          else
           for URL in $URL_LINE; do
             echo "Processing: $URL"
 
@@ -132,6 +167,15 @@ jobs:
               fi
             fi
           done
+          fi
+
+          FILE_COUNT=$(find tmp_downloads -type f 2>/dev/null | wc -l)
+          echo "Downloaded $FILE_COUNT files to tmp_downloads"
+          if [ "$FILE_COUNT" -eq 0 ] && [ "$MODE" != "zip" ]; then
+            echo "ERROR: No files downloaded"
+            ls -la tmp_downloads/
+            exit 1
+          fi
 
           if [ "$MODE" = "zip" ]; then
               ARCHIVE_NAME="tmp_downloads/archive_$(date +%Y%m%d_%H%M%S).tar.gz"
