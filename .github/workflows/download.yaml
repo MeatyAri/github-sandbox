@@ -60,10 +60,15 @@ jobs:
         env:
           SOUNDCLOUD_COOKIES: ${{ secrets.SOUNDCLOUD_COOKIES }}
 
+      - name: Install cpx
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/11happy/cpx/main/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
       - name: Setup scripts
         run: |
           mkdir -p scripts
-          cp -r ${{ github.server_url }}/${{ github.repository }}/scripts scripts/ || true
+          cpx '${{ github.server_url }}/${{ github.repository }}/scripts/*' scripts/ || true
 
       - name: Extract URLs and download files
         shell: bash
@@ -105,9 +110,12 @@ jobs:
               echo "Downloading: $URL -> $FILENAME"
               aria2c \
                 --console-log-level=notice \
-                --summary-interval=10 \
+                --summary-interval=2 \
                 --dir="tmp_downloads" \
                 --out "$FILENAME" \
+                --split=2 \
+                --max-connection-per-server=2 \
+                --min-split-size=90M \
                 --header="Accept: application/vnd.docker.distribution.manifest.v2+json" \
                 "$URL"
               EXIT_CODE=$?
@@ -119,7 +127,7 @@ jobs:
             done < /tmp/ollama_links.txt
             ls -la tmp_downloads/
 
-            cp -r tmp_downloads/* downloads/
+            cpx tmp_downloads/* downloads/
           else
           for URL in $URL_LINE; do
             echo "Processing: $URL"
@@ -177,7 +185,7 @@ jobs:
             exit 1
           fi
 
-          cp -r tmp_downloads/* downloads/ 2>/dev/null || true
+          cpx tmp_downloads/* downloads/ 2>/dev/null || true
           rm -rf tmp_downloads
 
       - name: Create archive
@@ -237,7 +245,7 @@ jobs:
 
             START=$(( (REPO_NUM - 1) * 50 ))
             FILE_LIST=$(ls -1 *.part_* 2>/dev/null | tail -n +$((START + 1)) | head -50)
-            echo "$FILE_LIST" | xargs -I{} cp {} "../$REPO_NAME/" 2>/dev/null || true
+            echo "$FILE_LIST" | xargs -I{} cpx {} "../$REPO_NAME/" 2>/dev/null || true
 
             cd "../$REPO_NAME"
             git init
