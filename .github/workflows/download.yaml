@@ -90,7 +90,8 @@ jobs:
 
           if [ "$MODE" = "ollama" ]; then
             echo "Getting Ollama direct links: $OLLAMA_MODEL"
-            omdd get $OLLAMA_MODEL > /tmp/ollama_links.txt
+            omdd get $OLLAMA_MODEL > /tmp/ollama_output.txt
+            python3 scripts/extract_ollama_links.py /tmp/ollama_output.txt > /tmp/ollama_links.txt
             echo "=== DEBUG: Links file contents ==="
             cat /tmp/ollama_links.txt
             echo "=== DEBUG: Line count ==="
@@ -117,6 +118,14 @@ jobs:
               fi
             done < /tmp/ollama_links.txt
             ls -la tmp_downloads/
+
+            ARCHIVE_NAME="tmp_downloads/archive_$(date +%Y%m%d_%H%M%S).tar.gz"
+            tar -cvf - -C tmp_downloads . | pigz -k > "$ARCHIVE_NAME"
+            cp "$ARCHIVE_NAME" "downloads/"
+            rm -f "$ARCHIVE_NAME"
+            rm -rf tmp_downloads
+            echo "Zipped archive saved to downloads"
+            exit 0
           else
           for URL in $URL_LINE; do
             echo "Processing: $URL"
