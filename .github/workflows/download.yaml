@@ -239,8 +239,9 @@ jobs:
           REPO_BASE="${{ github.repository }}"
           OWNER="${REPO_BASE%/*}"
 
-          for REPO_NUM in $(seq 1 $REPOS_NEEDED); do
-            REPO_NAME="large-files-part-$REPO_NUM"
+          push_repo() {
+            local REPO_NUM=$1
+            local REPO_NAME="large-files-part-$REPO_NUM"
             mkdir -p "../$REPO_NAME"
 
             START=$(( (REPO_NUM - 1) * 50 ))
@@ -267,8 +268,11 @@ jobs:
               git push origin HEAD:main --force
               echo "✓ Pushed batch $BATCH_NUM ($BATCH_SIZE files) to $REPO_NAME"
             done
+          }
 
-            cd ../downloads
+          for REPO_NUM in $(seq 1 $REPOS_NEEDED); do
+            push_repo $REPO_NUM &
           done
+          wait
 
           echo "✅ Distributed to $OWNER/large-files-part-{1..$REPOS_NEEDED}"
