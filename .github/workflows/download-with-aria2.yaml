@@ -8,6 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -160,9 +161,51 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          cd downloads
+          TOTAL_SIZE=$(du -sb downloads | cut -f1)
+          SIZE_GB=$((TOTAL_SIZE / 1024 / 1024 / 1024))
+          echo "Total download size: ${SIZE_GB}GB"
 
-          FILE_COUNT=$(find . -type f | wc -l)
+          REPO_BASE="${{ github.repository }}"
+          OWNER="${REPO_BASE%/*}"
+
+          distribute_to_repos() {
+            cd downloads
+            FILE_LIST=$(ls -1)
+            COUNT=0
+
+            for FILE in $FILE_LIST; do
+              PART_NUM=$(( (COUNT % 3) + 1 ))
+              REPO_NAME="large-files-part-${PART_NUM}"
+              TARGET_DIR="../$REPO_NAME"
+
+              mkdir -p "$TARGET_DIR"
+              cp "$FILE" "$TARGET_DIR/"
+
+              cd "$TARGET_DIR"
+              git init 2>/dev/null || true
+              git add -f .
+              git commit -m "Add $FILE [skip ci]" 2>/dev/null || true
+
+              if [ -d .git ]; then
+                git remote -v 2>/dev/null | grep -q origin || \
+                  git remote add origin "https://github.com/$OWNER/$REPO_NAME.git"
+                git push origin HEAD:main --force 2>/dev/null || \
+                  gh repo create "$REPO_NAME" --private --source=. --push
+              fi
+
+              cd ../..
+              COUNT=$((COUNT + 1))
+            done
+
+            echo "✅ Distributed to $OWNER/large-files-part-{1,2,3}"
+          }
+
+          if [ "$SIZE_GB" -gt 5 ]; then
+            distribute_to_repos
+            exit 0
+          fi
+
+          FILE_COUNT=$(find downloads -type f | wc -l)
           echo "Total files to push: $FILE_COUNT"
 
           BATCH_SIZE=10
@@ -172,14 +215,14 @@ jobs:
 
           > /tmp/batch_files.txt
 
-          find . -type f -print0 | sort -z | while IFS= read -r -d '' FILE; do
+          find downloads -type f -print0 | sort -z | while IFS= read -r -d '' FILE; do
             BATCH_NUM=$((BATCH_NUM + 1))
             printf '%s\0' "$FILE" >> /tmp/batch_files.txt
 
             if [ $((BATCH_NUM % BATCH_SIZE)) -eq 0 ] || [ $BATCH_NUM -eq "$FILE_COUNT" ]; then
               xargs -0 git add -f < /tmp/batch_files.txt
               git commit -m "Add downloaded files (batch $CURRENT_BATCH/$TOTAL_BATCHES) [skip ci]" || echo "Nothing to commit"
-              echo "🚀 Pushing batch $CURRENT_BATCH/$TOTAL_BATCHES..."
+              echo "Pushing batch $CURRENT_BATCH/$TOTAL_BATCHES..."
               git push origin HEAD:$BRANCH || true
 
               CURRENT_BATCH=$((CURRENT_BATCH + 1))
