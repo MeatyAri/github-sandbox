@@ -123,6 +123,18 @@ jobs:
             tar -cvf - -C tmp_downloads . | pigz -k > "$ARCHIVE_NAME"
             cp "$ARCHIVE_NAME" "downloads/"
             rm -f "$ARCHIVE_NAME"
+
+            ARCHIVE_BASENAME=$(basename "$ARCHIVE_NAME")
+            ARCHIVE_SIZE=$(stat -c%s "downloads/$ARCHIVE_BASENAME")
+            LIMIT=$((90 * 1024 * 1024))
+
+            if [ "$ARCHIVE_SIZE" -gt "$LIMIT" ]; then
+              echo "Splitting: $ARCHIVE_BASENAME ($(( ARCHIVE_SIZE / 1024 / 1024 ))MB)"
+              split -b 90M "downloads/$ARCHIVE_BASENAME" "downloads/${ARCHIVE_BASENAME}.part_"
+              rm -f "downloads/$ARCHIVE_BASENAME"
+              echo "Parts: $(ls "downloads/${ARCHIVE_BASENAME}.part_"* 2>/dev/null | wc -l)"
+            fi
+
             rm -rf tmp_downloads
             echo "Zipped archive saved to downloads"
             exit 0
@@ -188,6 +200,18 @@ jobs:
               tar -cvf - -C tmp_downloads . | pigz -k > "$ARCHIVE_NAME"
               cp "$ARCHIVE_NAME" "downloads/"
               rm -f "$ARCHIVE_NAME"
+
+              ARCHIVE_BASENAME=$(basename "$ARCHIVE_NAME")
+              ARCHIVE_SIZE=$(stat -c%s "downloads/$ARCHIVE_BASENAME")
+              LIMIT=$((90 * 1024 * 1024))
+
+              if [ "$ARCHIVE_SIZE" -gt "$LIMIT" ]; then
+                echo "Splitting: $ARCHIVE_BASENAME ($(( ARCHIVE_SIZE / 1024 / 1024 ))MB)"
+                split -b 90M "downloads/$ARCHIVE_BASENAME" "downloads/${ARCHIVE_BASENAME}.part_"
+                rm -f "downloads/$ARCHIVE_BASENAME"
+                echo "Parts: $(ls "downloads/${ARCHIVE_BASENAME}.part_"* 2>/dev/null | wc -l)"
+              fi
+
               rm -rf tmp_downloads
               echo "Zipped archive saved to downloads"
               exit 0
