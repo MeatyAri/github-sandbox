@@ -177,7 +177,12 @@ jobs:
           if [ "$MODE" = "zip" ]; then
               ARCHIVE_NAME="tmp_downloads/archive_$(date +%Y%m%d_%H%M%S).tar.gz"
               tar -cvf - -C tmp_downloads . | pigz -k > "$ARCHIVE_NAME"
-            fi
+              cp "$ARCHIVE_NAME" "downloads/"
+              rm -f "$ARCHIVE_NAME"
+              rm -rf tmp_downloads
+              echo "Zipped archive saved to downloads"
+              exit 0
+          fi
 
           for FILE in tmp_downloads/*; do
             [ -f "$FILE" ] || continue
@@ -247,7 +252,7 @@ jobs:
             echo "✅ Distributed to $OWNER/large-files-part-{1,2,3}"
           }
 
-          if [ "$SIZE_GB" -ge 0 ]; then
+          if [ "$SIZE_GB" -ge 4 ]; then
             distribute_to_repos
             exit 0
           fi
