@@ -9,6 +9,8 @@ jobs:
     permissions:
       contents: write
       actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

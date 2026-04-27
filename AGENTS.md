@@ -3,7 +3,7 @@
 Project: GitHub Actions-only. No local dev.
 
 Key files:
-- `.github/workflows/download-with-aria2.yaml` - main workflow
+- `.github/workflows/download.yaml` - main workflow
 - `README.md` - user docs
 
 Test changes: fork → edit workflow → push → check Actions tab.
