@@ -220,16 +220,21 @@ jobs:
               TARGET_DIR="../$REPO_NAME"
 
               mkdir -p "$TARGET_DIR"
-              cp "$FILE" "$TARGET_DIR/"
+              echo "=== DEBUG: Copying $FILE to $TARGET_DIR/"
+              cp "$FILE" "$TARGET_DIR/" || { echo "Failed to copy $FILE"; continue; }
+              ls -la "$TARGET_DIR/"
 
               cd "$TARGET_DIR"
               git init 2>/dev/null || true
               git add -f .
-              git commit -m "Add $FILE [skip ci]" 2>/dev/null || true
+              echo "=== DEBUG: Committing $FILE ==="
+              git commit -m "Add $FILE [skip ci]"
+              echo "=== DEBUG: Commit result: exit code $? ==="
 
               if [ -d .git ]; then
                 git remote -v 2>/dev/null | grep -q origin || \
                   git remote add origin "https://github.com/$OWNER/$REPO_NAME.git"
+                echo "=== DEBUG: Pushing to $REPO_NAME ==="
                 git push origin HEAD:main --force 2>/dev/null || \
                   gh repo create "$REPO_NAME" --private --source=. --push
               fi
@@ -241,7 +246,7 @@ jobs:
             echo "✅ Distributed to $OWNER/large-files-part-{1,2,3}"
           }
 
-          if [ "$SIZE_GB" -gt 5 ]; then
+          if [ "$SIZE_GB" -ge 0 ]; then
             distribute_to_repos
             exit 0
           fi
