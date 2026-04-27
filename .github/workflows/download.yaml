@@ -226,6 +226,8 @@ jobs:
 
               cd "$TARGET_DIR"
               git init 2>/dev/null || true
+              git config user.name "github-actions"
+              git config user.email "github-actions@github.com"
               git add -f .
               echo "=== DEBUG: Committing $FILE ==="
               git commit -m "Add $FILE [skip ci]"
