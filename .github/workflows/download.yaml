@@ -237,8 +237,7 @@ jobs:
                 git remote -v 2>/dev/null | grep -q origin || \
                   git remote add origin "https://github.com/$OWNER/$REPO_NAME.git"
                 echo "=== DEBUG: Pushing to $REPO_NAME ==="
-                git push origin HEAD:main --force 2>/dev/null || \
-                  gh repo create "$REPO_NAME" --private --source=. --push
+                git push origin HEAD:main --force
               fi
 
               cd ../..
