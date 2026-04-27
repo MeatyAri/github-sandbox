@@ -214,23 +214,11 @@ jobs:
 
       - name: Commit & Push in batches
         run: |
-          BRANCH="${GITHUB_REF_NAME}"
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
+          cd downloads
 
-          TOTAL_SIZE=$(du -sb downloads | cut -f1)
-          SIZE_GB=$((TOTAL_SIZE / 1024 / 1024 / 1024))
-          echo "Total download size: ${SIZE_GB}GB"
-
-          REPO_BASE="${{ github.repository }}"
-          OWNER="${REPO_BASE%/*}"
-
-          PART_COUNT=$(ls -1 downloads/*.part_* 2>/dev/null | wc -l)
-          SINGLE_FILE=$(ls -1 downloads/ 2>/dev/null | grep -v '.part_' | head -1)
-
-          if [ -n "$SINGLE_FILE" ]; then
-            PART_COUNT=1
-          fi
+          PART_COUNT=$(ls -1 *.part_* 2>/dev/null | wc -l)
+          SINGLE_FILE=$(ls -1 2>/dev/null | grep -v '.part_' | head -1)
+          [ -n "$SINGLE_FILE" ] && { PART_COUNT=1; mv "$SINGLE_FILE" "archive.tar.gz" 2>/dev/null; }
 
           if [ "$PART_COUNT" -eq 0 ]; then
             echo "No files to push"
@@ -238,44 +226,41 @@ jobs:
           fi
 
           REPOS_NEEDED=$(( (PART_COUNT + 50 - 1) / 50 ))
-          echo "Parts: $PART_COUNT, Repos needed: $REPOS_NEEDED"
+          BATCH_SIZE=10
 
-          distribute_to_repos() {
-            cd downloads
-            FILE_LIST=$(ls -1)
-            COUNT=0
+          REPO_BASE="${{ github.repository }}"
+          OWNER="${REPO_BASE%/*}"
 
-            for FILE in $FILE_LIST; do
-              REPO_NUM=$(( (COUNT / 50) + 1 ))
-              if [ "$REPO_NUM" -gt "$REPOS_NEEDED" ]; then
-                REPO_NUM=$REPOS_NEEDED
-              fi
-              REPO_NAME="large-files-part-${REPO_NUM}"
-              TARGET_DIR="../$REPO_NAME"
+          for REPO_NUM in $(seq 1 $REPOS_NEEDED); do
+            REPO_NAME="large-files-part-$REPO_NUM"
+            mkdir -p "../$REPO_NAME"
 
-              mkdir -p "$TARGET_DIR"
-              echo "Copying $FILE to $TARGET_DIR/"
-              cp "$FILE" "$TARGET_DIR/" || { echo "Failed to copy $FILE"; continue; }
+            START=$(( (REPO_NUM - 1) * 50 ))
+            FILE_LIST=$(ls -1 *.part_* 2>/dev/null | tail -n +$((START + 1)) | head -50)
+            echo "$FILE_LIST" | xargs -I{} cp {} "../$REPO_NAME/" 2>/dev/null || true
 
-              cd "$TARGET_DIR"
-              git init 2>/dev/null || true
-              git config user.name "github-actions"
-              git config user.email "github-actions@github.com"
-              git add -f .
-              git commit -m "Add $FILE [skip ci]" || echo "Nothing to commit"
+            cd "../$REPO_NAME"
+            git init
+            git config user.name "github-actions"
+            git config user.email "github-actions@github.com"
 
-              if [ -d .git ]; then
-                git remote -v 2>/dev/null | grep -q origin || \
-                  git remote add origin "https://x-access-token:${{ secrets.CROSS_REPO_PAT }}@github.com/$OWNER/$REPO_NAME.git"
-                git push origin HEAD:main --force || echo "Failed to push $REPO_NAME"
-              fi
+            ALL_FILES=(*.part_*)
+            TOTAL_FILES=${#ALL_FILES[@]}
 
-              cd ../..
-              COUNT=$((COUNT + 1))
+            for ((i=0; i<TOTAL_FILES; i+=BATCH_SIZE)); do
+              BATCH_NUM=$((i / BATCH_SIZE + 1))
+
+              for ((j=i; j<i+BATCH_SIZE && j<TOTAL_FILES; j++)); do
+                [ -f "${ALL_FILES[$j]}" ] && git add -f "${ALL_FILES[$j]}"
+              done
+
+              git commit -m "Batch $BATCH_NUM [skip ci]" 2>/dev/null || true
+              git remote add origin "https://x-access-token:${{ secrets.CROSS_REPO_PAT }}@github.com/$OWNER/$REPO_NAME.git" 2>/dev/null || true
+              git push origin HEAD:main --force
+              echo "✓ Pushed batch $BATCH_NUM ($BATCH_SIZE files) to $REPO_NAME"
             done
 
-            echo "✅ Distributed to $OWNER/large-files-part-{1..$REPOS_NEEDED}"
-          }
+            cd ../downloads
+          done
 
-          distribute_to_repos
-          exit 0
+          echo "✅ Distributed to $OWNER/large-files-part-{1..$REPOS_NEEDED}"
