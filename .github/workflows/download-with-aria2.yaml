@@ -152,19 +152,14 @@ jobs:
               yt-dlp -q --no-warnings -o "tmp_downloads/%(title)s.%(ext)s" "$URL"
 
             else
-              echo "Trying basic yt-dlp: $URL"
-              if yt-dlp -q --no-warnings -o "tmp_downloads/%(title)s.%(ext)s" "$URL" 2>/dev/null; then
-                echo "yt-dlp succeeded"
-              else
-                echo "Downloading with aria2: $URL"
-                aria2c \
-                  --split=2 \
-                  --max-connection-per-server=2 \
-                  --min-split-size=90M \
-                  --summary-interval=2 \
-                  --dir="tmp_downloads" \
-                  "$URL"
-              fi
+              echo "Downloading with aria2: $URL"
+              aria2c \
+                --split=2 \
+                --max-connection-per-server=2 \
+                --min-split-size=90M \
+                --summary-interval=2 \
+                --dir="tmp_downloads" \
+                "$URL"
             fi
           done
           fi
@@ -179,7 +174,7 @@ jobs:
 
           if [ "$MODE" = "zip" ]; then
               ARCHIVE_NAME="tmp_downloads/archive_$(date +%Y%m%d_%H%M%S).tar.gz"
-              tar -cvf - -C tmp_downloads . | pigz -k -p all > "$ARCHIVE_NAME"
+              tar -cvf - -C tmp_downloads . | pigz -k > "$ARCHIVE_NAME"
             fi
 
           for FILE in tmp_downloads/*; do
