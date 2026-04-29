@@ -1,12 +1,8 @@
-import os
 import sys
-import json
-import time
 import base64
 import requests
 from math import floor
 from itertools import cycle
-from urllib.parse import urlparse
 
 BUNKRR_API = "https://bunkr.cr/api/vs"
 BUNKRR_DOMAINS = ("bunkr.si", "bunkr.fi", "bunkr.ru", "bunkr.cr", "bunkr.rip", "bunkrr.su")
@@ -59,7 +55,7 @@ def decrypt_url(api_resp: dict) -> str | None:
         return None
 
 
-def download_bunkr(url: str, outdir: str):
+def resolve_bunkr(url: str) -> str:
     api_resp = fetch_bunkr_api(url)
     if not api_resp:
         print("ERROR: Failed to fetch Bunkr API", file=sys.stderr)
@@ -68,35 +64,11 @@ def download_bunkr(url: str, outdir: str):
     if not download_link:
         print("ERROR: Failed to decrypt URL", file=sys.stderr)
         sys.exit(1)
-    parsed = urlparse(download_link)
-    filename = parsed.path.rstrip("/").split("/")[-1]
-    filepath = os.path.join(outdir, filename)
-    resp = requests.get(download_link, headers=BUNKRR_DOWNLOAD_HEADERS, stream=True, timeout=120)
-    if resp.status_code != 200:
-        print(f"ERROR: HTTP {resp.status_code}", file=sys.stderr)
-        sys.exit(1)
-    total = int(resp.headers.get("Content-Length", 0))
-    downloaded = 0
-    start_time = time.time()
-    last_print = 0
-    with open(filepath, "wb") as f:
-        for chunk in resp.iter_content(chunk_size=8192):
-            if chunk:
-                f.write(chunk)
-                downloaded += len(chunk)
-                now = time.time()
-                if now - last_print >= 2:
-                    elapsed = now - start_time
-                    speed = downloaded / elapsed / 1024 / 1024
-                    pct = int(downloaded * 100 / total) if total > 0 else 0
-                    eta = (total - downloaded) / (downloaded / elapsed) if downloaded > 0 else 0
-                    print(f"PROGRESS:{pct}%  {speed:.1f}MB/s  ETA:{int(eta)}s", file=sys.stderr)
-                    last_print = now
-    print(f"DONE:{filepath}")
+    print(download_link)
+    sys.exit(0)
 
 
 if __name__ == "__main__":
     url = sys.argv[1]
-    outdir = sys.argv[2] if len(sys.argv) > 2 else "."
     if is_bunkr_url(url):
-        download_bunkr(url, outdir)
+        resolve_bunkr(url)

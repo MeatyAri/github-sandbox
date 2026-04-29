@@ -133,8 +133,17 @@ jobs:
             echo "Processing: $URL"
 
             if echo "$URL" | grep -qE "(bunkr\.si|bunkr\.fi|bunkr\.ru|bunkr\.cr|bunkr\.rip|bunkrr\.su)"; then
-              echo "Downloading Bunkr: $URL"
-              python3 scripts/bunkr.py "$URL" "tmp_downloads"
+              echo "Resolving Bunkr URL:"
+              BUNKR_URL=$(python3 scripts/bunkr.py "$URL")
+              [[ -z "$BUNKR_URL" ]] && { echo "ERROR: Failed to resolve bunkr URL"; exit 1; }
+              echo "Downloading with aria2: $BUNKR_URL"
+              aria2c \
+                --split=8 \
+                --max-connection-per-server=8 \
+                --min-split-size=5M \
+                --dir="tmp_downloads" \
+                --out "$(basename "$BUNKR_URL")" \
+                "$BUNKR_URL"
 
             elif echo "$URL" | grep -qE "youtube\.com|youtu\.be"; then
               echo "Downloading YouTube: $URL"
