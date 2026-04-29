@@ -258,7 +258,7 @@ jobs:
 
           if [ "$SIZE" -eq 0 ]; then
             echo "No archive, committing individual files"
-            git add -f downloads/
+            git add -f .
             git commit --allow-empty -m "Download: $(date +%Y%m%d_%H%M%S) single file [skip ci]" || true
             git push origin HEAD:${{ github.ref_name }} --force
             echo "✅ Pushed single files to ${{ github.repository }} on ${{ github.ref_name }}"
