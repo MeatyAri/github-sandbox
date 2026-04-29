@@ -255,6 +255,8 @@ jobs:
         run: |
           SIZE=$(cat /tmp/archive_size.txt 2>/dev/null || echo 0)
           cd downloads
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
 
           if [ "$SIZE" -eq 0 ]; then
             echo "No archive, committing individual files"
@@ -302,8 +304,6 @@ jobs:
 
               cd "../$REPO_NAME"
               git init
-              git config user.name "github-actions"
-              git config user.email "github-actions@github.com"
 
               ALL_FILES=(*.part_*)
               TOTAL_FILES=${#ALL_FILES[@]}
