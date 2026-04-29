@@ -209,9 +209,11 @@ jobs:
           ARCHIVE_NAME="/tmp/archive_$(date +%Y%m%d_%H%M%S).tar.gz"
           tar -cvf - . | pigz -k > "$ARCHIVE_NAME"
 
+          SIZE=$(stat -c%s "$ARCHIVE_NAME")
+          echo "$SIZE" > "$GITHUB_WORKSPACE/archive_size.txt"
           rm -f ./*
           mv "$ARCHIVE_NAME" .
-          echo "Archive created: $(basename "$ARCHIVE_NAME")"
+          echo "Archive created: $(basename "$ARCHIVE_NAME") ($(( SIZE / 1024 / 1024 ))MB)"
 
       - name: Split large files
         run: |
@@ -229,59 +231,76 @@ jobs:
             fi
           done
 
-      - name: Commit & Push in batches
+      - name: Commit & Push
         run: |
+          SIZE=$(cat "$GITHUB_WORKSPACE/archive_size.txt" 2>/dev/null || echo 0)
           cd downloads
 
-          PART_COUNT=$(ls -1 *.part_* 2>/dev/null | wc -l)
-          SINGLE_FILE=$(ls -1 2>/dev/null | grep -v '.part_' | head -1)
-          [ -n "$SINGLE_FILE" ] && { PART_COUNT=1; mv "$SINGLE_FILE" "archive.tar.gz" 2>/dev/null; }
+          if [ "$SIZE" -lt $((4 * 1024 * 1024 * 1024)) ]; then
+            echo "File <4GB ($(( SIZE / 1024 / 1024 ))MB), committing to current repo"
+            cd downloads
 
-          if [ "$PART_COUNT" -eq 0 ]; then
-            echo "No files to push"
-            exit 0
-          fi
+            PART_FILES=($(ls -1 *.part_* 2>/dev/null))
+            if [ ${#PART_FILES[@]} -eq 0 ]; then
+              PART_FILES=($(ls -1 *.tar.gz 2>/dev/null))
+            fi
 
-          REPOS_NEEDED=$(( (PART_COUNT + 50 - 1) / 50 ))
-          BATCH_SIZE=10
+            echo "Adding: ${PART_FILES[*]}"
+            git add -f "${PART_FILES[@]}"
+            git commit -m "Download: $(date +%Y%m%d_%H%M%S) [skip ci]" || true
+            git push origin HEAD:${{ github.ref_name }} --force
+            echo "✅ Pushed to ${{ github.repository }} on ${{ github.ref_name }}"
+          else
+            echo "File >=4GB ($(( SIZE / 1024 / 1024 / 1024 ))GB), using large files pipeline"
+            cd downloads
 
-          REPO_BASE="${{ github.repository }}"
-          OWNER="${REPO_BASE%/*}"
+            PART_COUNT=$(ls -1 *.part_* 2>/dev/null | wc -l)
+            if [ "$PART_COUNT" -eq 0 ]; then
+              echo "No files to push"
+              exit 0
+            fi
 
-          push_repo() {
-            local REPO_NUM=$1
-            local REPO_NAME="large-files-part-$REPO_NUM"
-            mkdir -p "../$REPO_NAME"
+            REPOS_NEEDED=$(( (PART_COUNT + 50 - 1) / 50 ))
+            BATCH_SIZE=10
 
-            START=$(( (REPO_NUM - 1) * 50 ))
-            FILE_LIST=$(ls -1 *.part_* 2>/dev/null | tail -n +$((START + 1)) | head -50)
-            echo "$FILE_LIST" | xargs -I{} cpx {} "../$REPO_NAME/" 2>/dev/null || true
+            REPO_BASE="${{ github.repository }}"
+            OWNER="${REPO_BASE%/*}"
 
-            cd "../$REPO_NAME"
-            git init
-            git config user.name "github-actions"
-            git config user.email "github-actions@github.com"
+            push_repo() {
+              local REPO_NUM=$1
+              local REPO_NAME="large-files-part-$REPO_NUM"
+              mkdir -p "../$REPO_NAME"
 
-            ALL_FILES=(*.part_*)
-            TOTAL_FILES=${#ALL_FILES[@]}
+              START=$(( (REPO_NUM - 1) * 50 ))
+              FILE_LIST=$(ls -1 *.part_* 2>/dev/null | tail -n +$((START + 1)) | head -50)
+              echo "$FILE_LIST" | xargs -I{} cpx {} "../$REPO_NAME/" 2>/dev/null || true
 
-            for ((i=0; i<TOTAL_FILES; i+=BATCH_SIZE)); do
-              BATCH_NUM=$((i / BATCH_SIZE + 1))
+              cd "../$REPO_NAME"
+              git init
+              git config user.name "github-actions"
+              git config user.email "github-actions@github.com"
 
-              for ((j=i; j<i+BATCH_SIZE && j<TOTAL_FILES; j++)); do
-                [ -f "${ALL_FILES[$j]}" ] && git add -f "${ALL_FILES[$j]}"
+              ALL_FILES=(*.part_*)
+              TOTAL_FILES=${#ALL_FILES[@]}
+
+              for ((i=0; i<TOTAL_FILES; i+=BATCH_SIZE)); do
+                BATCH_NUM=$((i / BATCH_SIZE + 1))
+
+                for ((j=i; j<i+BATCH_SIZE && j<TOTAL_FILES; j++)); do
+                  [ -f "${ALL_FILES[$j]}" ] && git add -f "${ALL_FILES[$j]}"
+                done
+
+                git commit -m "Batch $BATCH_NUM [skip ci]" 2>/dev/null || true
+                git remote add origin "https://x-access-token:${{ secrets.CROSS_REPO_PAT }}@github.com/$OWNER/$REPO_NAME.git" 2>/dev/null || true
+                git push origin HEAD:main --force
+                echo "✓ Pushed batch $BATCH_NUM ($BATCH_SIZE files) to $REPO_NAME"
               done
+            }
 
-              git commit -m "Batch $BATCH_NUM [skip ci]" 2>/dev/null || true
-              git remote add origin "https://x-access-token:${{ secrets.CROSS_REPO_PAT }}@github.com/$OWNER/$REPO_NAME.git" 2>/dev/null || true
-              git push origin HEAD:main --force
-              echo "✓ Pushed batch $BATCH_NUM ($BATCH_SIZE files) to $REPO_NAME"
+            for REPO_NUM in $(seq 1 $REPOS_NEEDED); do
+              push_repo $REPO_NUM &
             done
-          }
+            wait
 
-          for REPO_NUM in $(seq 1 $REPOS_NEEDED); do
-            push_repo $REPO_NUM &
-          done
-          wait
-
-          echo "✅ Distributed to $OWNER/large-files-part-{1..$REPOS_NEEDED}"
+            echo "✅ Distributed to $OWNER/large-files-part-{1..$REPOS_NEEDED}"
+          fi
