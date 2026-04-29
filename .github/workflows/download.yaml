@@ -258,25 +258,49 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
+          BATCH_SIZE=10
+
           if [ "$SIZE" -eq 0 ]; then
-            echo "No archive, committing individual files"
-            git add -f .
-            git commit --allow-empty -m "Download: $(date +%Y%m%d_%H%M%S) single file [skip ci]" || true
-            git push origin HEAD:${{ github.ref_name }} --force
-            echo "✅ Pushed single files to ${{ github.repository }} on ${{ github.ref_name }}"
+            echo "No archive, committing individual files in batches"
+            FILE_LIST=($(find . -type f -not -path './.git/*' 2>/dev/null | head -1000))
+            TOTAL=${#FILE_LIST[@]}
+            if [ "$TOTAL" -eq 0 ]; then
+              git add -f .
+              git commit --allow-empty -m "Download: $(date +%Y%m%d_%H%M%S) single file [skip ci]" || true
+            else
+              for ((batch=0; batch<TOTAL; batch+=BATCH_SIZE)); do
+                BATCH_NUM=$((batch / BATCH_SIZE + 1))
+                BATCH_LIST=("${FILE_LIST[@]:batch:BATCH_SIZE}")
+                git add -f "${BATCH_LIST[@]}"
+                git commit --no-verify -m "Download: $(date +%Y%m%d_%H%M%S) batch $BATCH_NUM/$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE )) [skip ci]" || true
+                git push origin HEAD:${{ github.ref_name }} --force
+                echo "✓ Pushed batch $BATCH_NUM/$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE )) ($BATCH_SIZE files) to ${{ github.repository }}"
+              done
+            fi
+
           elif [ "$SIZE" -lt $((4 * 1024 * 1024 * 1024)) ]; then
             echo "Archive <4GB ($(( SIZE / 1024 / 1024 ))MB), committing to current repo"
 
-            PART_FILES=($(ls -1 *.part_* 2>/dev/null))
-            if [ ${#PART_FILES[@]} -eq 0 ]; then
-              PART_FILES=($(ls -1 *.tar.gz 2>/dev/null))
+            PART_LIST=($(ls -1 *.part_* 2>/dev/null))
+            if [ ${#PART_LIST[@]} -eq 0 ]; then
+              PART_LIST=($(ls -1 *.tar.gz 2>/dev/null))
             fi
 
-            echo "Adding: ${PART_FILES[*]}"
-            git add -f "${PART_FILES[@]}"
-            git commit -m "Download: $(date +%Y%m%d_%H%M%S) [skip ci]" || true
-            git push origin HEAD:${{ github.ref_name }} --force
-            echo "✅ Pushed to ${{ github.repository }} on ${{ github.ref_name }}"
+            TOTAL=${#PART_LIST[@]}
+            if [ "$TOTAL" -eq 0 ]; then
+              echo "No files to commit"
+              exit 0
+            fi
+
+            for ((batch=0; batch<TOTAL; batch+=BATCH_SIZE)); do
+              BATCH_NUM=$((batch / BATCH_SIZE + 1))
+              BATCH_LIST=("${PART_LIST[@]:batch:BATCH_SIZE}")
+              git add -f "${BATCH_LIST[@]}"
+              git commit --no-verify -m "Download: $(date +%Y%m%d_%H%M%S) batch $BATCH_NUM/$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE )) [skip ci]" || true
+              git push origin HEAD:${{ github.ref_name }} --force
+              echo "✓ Pushed batch $BATCH_NUM/$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE )) to ${{ github.repository }}"
+            done
+
           else
             echo "File >=4GB ($(( SIZE / 1024 / 1024 / 1024 ))GB), using large files pipeline"
             cd downloads

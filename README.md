@@ -141,23 +141,22 @@ Downloads > 4.5GB auto-split into 90MB parts → pushed to `large-files-part-*` 
 
 **Flow:**
 1. Pre-create `large-files-part-1`, `large-files-part-2`, etc. (each = 4.5GB)
-2. Add `CROSS_REPO_PAT` secret to each new repo
-3. Trigger download
-4. Workflow splits → distributes → pushes to repos
-5. **Reassemble locally:**
+2. Trigger download
+3. Workflow splits → distributes → pushes to repos
+4. **Reassemble locally:**
 
 ```bash
 # Linux/macOS
 cat large-files-part-1/*.part_* > original_filename.tar.gz
 
 # Windows - join split files
-REM Option 1: copy
+# Option 1: copy
 copy /b large-files-part-1\*.part_* combined_filename.tar.gz
 
-REM Option 2: 7zip (command line)
-7z x large-files-part-1\*.part_* -ofile.tar.gz
+# Option 2: 7zip (command line)
+7z x large-files-part-1\*.part_* -o.
 
-REM Option 3: 7zip (GUI)
+# Option 3: 7zip (GUI)
 1. Put all of the downloaded parts in one folder
 2. Select the first part_* file in folder
 3. Right-click → 7-Zip → Combine Files
@@ -183,9 +182,6 @@ tar -xzf archive_YYYYMMDD_HHMMSS.tar.gz -C /path/to/folder
 **Command line:**
 ```cmd
 7z x file.tar.gz
-
-REM Or to folder
-7z x file.tar.gz -ofolder
 ```
 
 ---
