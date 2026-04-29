@@ -76,21 +76,35 @@ jobs:
           MSG=$(git log -1 --pretty=%B)
           echo "Commit message: $MSG"
 
+          DO_ARCHIVE=0
           if echo "$MSG" | grep -qP 'download-zip:'; then
             MODE="zip"
             URL_LINE=$(echo "$MSG" | grep -oP 'download-zip:\s*\K.*')
+            DO_ARCHIVE=1
           elif echo "$MSG" | grep -qP 'ollama:'; then
             MODE="ollama"
             OLLAMA_MODEL=$(echo "$MSG" | grep -oP 'ollama:\s*\K.*')
+            DO_ARCHIVE=1
           elif echo "$MSG" | grep -qP 'download:'; then
-            MODE="normal"
             URL_LINE=$(echo "$MSG" | grep -oP 'download:\s*\K.*')
+            URL_COUNT=$(echo "$URL_LINE" | wc -w)
+            if [ "$URL_COUNT" -gt 1 ]; then
+              MODE="zip"
+              echo "  download: multi-file → upgrade to zip mode"
+              DO_ARCHIVE=1
+            else
+              MODE="normal"
+              DO_ARCHIVE=0
+              echo "  download: single file mode, no archive"
+            fi
           else
             echo "❌ No download command found in commit message"
             exit 1
           fi
 
           echo "Mode: $MODE"
+          echo "Archive: $DO_ARCHIVE"
+          echo "$DO_ARCHIVE" > /tmp/do_archive.txt
           mkdir -p downloads tmp_downloads
 
           if [ "$MODE" = "ollama" ]; then
@@ -199,10 +213,16 @@ jobs:
 
       - name: Create archive
         run: |
+          DO_ARCHIVE=$(cat /tmp/do_archive.txt 2>/dev/null || echo 0)
           cd downloads
           FILE_COUNT=$(find . -type f | wc -l)
           if [ "$FILE_COUNT" -eq 0 ]; then
             echo "No files to archive"
+            exit 0
+          fi
+          if [ "$DO_ARCHIVE" -ne 1 ]; then
+            echo "Single file mode - keeping files as-is, no archive"
+            echo "0" > /tmp/archive_size.txt
             exit 0
           fi
 
@@ -210,7 +230,7 @@ jobs:
           tar -cvf - . | pigz -k > "$ARCHIVE_NAME"
 
           SIZE=$(stat -c%s "$ARCHIVE_NAME")
-          echo "$SIZE" > "$GITHUB_WORKSPACE/archive_size.txt"
+          echo "$SIZE" > "/tmp/archive_size.txt"
           rm -f ./*
           mv "$ARCHIVE_NAME" .
           echo "Archive created: $(basename "$ARCHIVE_NAME") ($(( SIZE / 1024 / 1024 ))MB)"
@@ -233,12 +253,17 @@ jobs:
 
       - name: Commit & Push
         run: |
-          SIZE=$(cat "$GITHUB_WORKSPACE/archive_size.txt" 2>/dev/null || echo 0)
+          SIZE=$(cat /tmp/archive_size.txt 2>/dev/null || echo 0)
           cd downloads
 
-          if [ "$SIZE" -lt $((4 * 1024 * 1024 * 1024)) ]; then
-            echo "File <4GB ($(( SIZE / 1024 / 1024 ))MB), committing to current repo"
-            cd downloads
+          if [ "$SIZE" -eq 0 ]; then
+            echo "No archive, committing individual files"
+            git add -f downloads/
+            git commit --allow-empty -m "Download: $(date +%Y%m%d_%H%M%S) single file [skip ci]" || true
+            git push origin HEAD:${{ github.ref_name }} --force
+            echo "✅ Pushed single files to ${{ github.repository }} on ${{ github.ref_name }}"
+          elif [ "$SIZE" -lt $((4 * 1024 * 1024 * 1024)) ]; then
+            echo "Archive <4GB ($(( SIZE / 1024 / 1024 ))MB), committing to current repo"
 
             PART_FILES=($(ls -1 *.part_* 2>/dev/null))
             if [ ${#PART_FILES[@]} -eq 0 ]; then

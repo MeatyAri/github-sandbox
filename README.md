@@ -1,179 +1,210 @@
 # github-sandbox
 
-# 📥 Download Files via Commit Message
+# 📥 Download Anything via Commit Message
 
-A GitHub Actions workflow that lets you download files into your repository just by writing a special commit message — no terminal or command line needed.
+**For people in countries with limited or throttled internet.**
 
----
+Your ISP blocks YouTube? Slow downloads? GitHub is usually open. Use GitHub's servers as a proxy and download at full speed anywhere in the world.
 
-## ⚙️ Setup
-
-0. Fork this repo
-1. Go to your repository on GitHub
-2. Click **Settings** → **Actions** → **General**
-3. Scroll down to **Workflow permissions**
-4. Select **Read and write permissions** and click **Save**
-
-That's it — no tokens or secrets needed.
-
-### Supported Platforms
-
-- **YouTube** (fully tested) — also supports YouTube Music
-- **Bunkr** (fully tested)
-- Other streaming sites may work with yt-dlp
-- **any publickly available downloadable link**
+No terminal. No CLI. Just a commit message → files land in `downloads/`.
 
 ---
 
-## 🔐 YouTube Cookies (Optional, for age-restricted/paid content)
+## ✨ Features
 
-If downloading age-restricted or member-only YouTube videos, you'll need to add cookies:
+- **YouTube**: videos, music, age-restricted, members-only (cookies required)
+- **Ollama models**: download LLMs directly from ollama.com library
+- **Apple Podcasts** + Rumble + Odysee + BitChute + Bandcamp + Pexels
+- **Bunkr**: automatic extraction
+- **Twitch** + **Reddit** + **SoundCloud**: with cookies
+- **Any URL**: publicly accessible link
+- **Large files 5GB+**: infinite scaling across multiple repos
+- **Split archives**: download-zip bundles everything into timestamped tar.gz
 
-### Step 1: Get cookies.txt
-
-1. Install **"Get cookies.txt LOCALLY"** extension in Chrome
-2. Enable **Allow in incognito**
-3. Open an **Incognito window** → log into YouTube
-4. Visit `https://www.youtube.com/robots.txt`
-5. Right-click extension icon → **"Export"**
-6. Save as `youtube_cookies.txt`
-7. Close incognito, never use it again
-
-### Step 2: Add to GitHub Secrets
-
-1. Go to your repository on GitHub
-2. Click **Settings** → **Secrets and variables** → **Actions**
-3. Click **New repository secret**
-4. Name: `YOUTUBE_COOKIES`
-5. Open your `youtube_cookies.txt` file, copy everything
-6. Paste into the **Secret** field
-7. Click **Add secret**
-
-That's it — the workflow will use these cookies automatically.
-
-### ⚠️ Cookies Expire
-
-YouTube rotates cookies frequently (typical lifespan 3-5 days) due to YouTube's anti-bot measures.
-You may need to re-export cookies periodically.
-If downloads start failing, fetch new cookies and update the secret.
-**YouTube detects bot most of the time; cookies required almost always.**
+**Streaming sites not working?** Report issues, we'll investigate, DRM protected music such as Spotify, Apple Music won't work.
 
 ---
 
-### How to trigger a download
+## ⚡ Quick Start
 
-1. Open any file in your repository on GitHub (for example, this `README.md`)
-2. Click the **pencil icon** (✏️) at the top right to edit it
-3. Make any small change (add a space, a blank line, anything)
-4. Scroll down to the **Commit changes** section
-5. Select **Commit directly to the `main` branch**
-6. In the commit message box, type one of the commands below
-7. Click **Commit changes**
-
-The workflow will run automatically and the downloaded files will appear in the `downloads/` folder.
-
-### ⚡ Quick Commands (No Editor Needed)
-
-Trigger downloads without editing any file:
-### Download
 ```bash
 git commit --allow-empty -m "download: https://example.com/file.zip" && git push
 ```
-### Cancel/Clean (undo last commit)
-```bash
-git reset --hard HEAD~1 && git push --force
-```
+
+Files → `downloads/` folder.
 
 ---
 
-## 📝 Commands
+## 🛠️ Setup
+
+### 1. Fork repo
+
+### 2. Enable workflow permissions
+
+1. **Settings** → **Actions** → **General**
+2. **Workflow permissions** → **Read and write**
+3. **Save**
+
+### 3. Add GitHub token (required only for files > 4.5GB)
+
+1. Create **GitHub Fine-grained** token:
+   - Go to **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens**
+   - **Generate new token** → select **All Repositories** and set a name → copy token
+2. **Settings** → **Secrets and variables** → **Actions**
+3. **New repository secret**
+4. Name: `CROSS_REPO_PAT`
+5. Paste token → **Add secret**
+
+### 4. Pre-create large file repos (only if downloading > 4.5GB)
+
+Each `large-files-part-*` repo = 4.5GB capacity.
+
+Example: 10GB file → create `large-files-part-1`, `large-files-part-2`, `large-files-part-3`.
+
+1. Create new repo on GitHub: `large-files-part-1`
+2. Repeat for each additional repo needed
+
+---
+
+## 🍪 Streaming Site Cookies (Optional)
+
+Required for age-restricted / member-only / private content / bot errors.
+
+**Supported:** YouTube, Twitch, Reddit, SoundCloud.
+
+### Get cookies
+
+1. Install **"Get cookies.txt LOCALLY"** extension (Chrome)
+2. Enable **Allow in incognito**
+3. Open **Incognito window** → log into site
+4. Visit `https://[site].com/robots.txt`
+5. Right-click extension → **Export** → save as `[site]_cookies.txt`
+
+### Add to GitHub Secrets
+
+| Site | Secret Name |
+|------|-------------|
+| YouTube | `YOUTUBE_COOKIES` |
+| Twitch | `TWITCH_COOKIES` |
+| Reddit | `REDDIT_COOKIES` |
+| SoundCloud | `SOUNDCLOUD_COOKIES` |
+
+Copy file contents → paste as secret value.
+
+**Refresh frequently** — sites rotate cookies every 3-5 days.
+
+---
+
+## 📋 Commands
 
 ### Download files individually
 
-Downloads each file and saves it by its original filename.
-
 ```
-download: URL1 URL2 URL3
+download: URL
 ```
-
-**Examples:**
 
 ```
 download: https://example.com/file.zip
 ```
 
+### Download + archive into single tar.gz
+
 ```
-download: https://example.com/a.zip https://example.com/b.pdf https://example.com/c.zip
+download-zip: URL
 ```
+
+```
+download-zip: https://example.com/a.zip https://example.com/b.pdf
+```
+
+Output: `archive_YYYYMMDD_HHMMSS.tar.gz`
+
+### Download Ollama model
+
+```
+ollama: gemma4:e4b
+```
+
+```
+ollama: qwen3.6:35b
+```
+
+Downloads all model shards and manifest file automatically.
 
 ---
 
-### Download and archive into a single ZIP
+## 📂 Large Files 5GB+
 
-Downloads all files and bundles them into one timestamped `.zip` archive saved to `downloads/`.
+Downloads > 4.5GB auto-split into 90MB parts → pushed to `large-files-part-*` repos.
 
-```
-download-zip: URL1 URL2 URL3
-```
+**Infinite scaling** — create more repos as needed.
 
-**Examples:**
-
-```
-download-zip: https://example.com/file.zip
-```
-
-```
-download-zip: https://example.com/a.zip https://example.com/b.pdf https://example.com/c.zip
-```
-
-The resulting archive will be named like: `archive_20250423_153012.zip`
-
----
-
-## 📁 Output
-
-| Command | Result |
-|---|---|
-| `download:` | Each file saved individually in `downloads/` with its original name |
-| `download-zip:` | All files bundled into a single `archive_YYYYMMDD_HHMMSS.zip` in `downloads/` |
-
----
-
-## ⬇️ Extracting split files
-
-If your download was split into multiple `.part_N` files (common with large files), reassemble them:
-
-### Linux / macOS
+**Flow:**
+1. Pre-create `large-files-part-1`, `large-files-part-2`, etc. (each = 4.5GB)
+2. Add `CROSS_REPO_PAT` secret to each new repo
+3. Trigger download
+4. Workflow splits → distributes → pushes to repos
+5. **Reassemble locally:**
 
 ```bash
-cat downloads/filename.part_* > downloads/original_filename
+# Linux/macOS
+cat large-files-part-1/*.part_* > original_filename.tar.gz
+
+# Windows - join split files
+REM Option 1: copy
+copy /b large-files-part-1\*.part_* combined_filename.tar.gz
+
+REM Option 2: 7zip (command line)
+7z x large-files-part-1\*.part_* -ofile.tar.gz
+
+REM Option 3: 7zip (GUI)
+1. Put all of the downloaded parts in one folder
+2. Select the first part_* file in folder
+3. Right-click → 7-Zip → Combine Files
+4. Save as combined_filename.tar.gz
 ```
 
-### Windows (Command Prompt)
+### Extract tar.gz
 
+```bash
+# Linux/macOS
+tar -xzf archive_YYYYMMDD_HHMMSS.tar.gz
+
+# Or specify destination
+tar -xzf archive_YYYYMMDD_HHMMSS.tar.gz -C /path/to/folder
+```
+
+### Windows - extract tar.gz
+
+**GUI:**
+1. Right-click `archive.tar.gz`
+2. 7-Zip → Extract Here
+
+**Command line:**
 ```cmd
-copy /b downloads\filename.part_* downloads\original_filename
+7z x file.tar.gz
+
+REM Or to folder
+7z x file.tar.gz -ofolder
 ```
 
-### Windows (GUI)
+---
 
-Use **7-Zip** → right-click the first `.part_1` file → "7-Zip" → "Combine files..." → save as original filename.
+## ✅ Result
+
+| Command | Output |
+|---------|--------|
+| `download:` | Files in `downloads/` with original names |
+| `download-zip:` | Single `archive_YYYYMMDD_HHMMSS.tar.gz` in `downloads/` |
+| `ollama:` | Model shards in `downloads/` |
+
+Check **Actions** tab for progress → **Code** tab → `downloads/` for files.
 
 ---
 
-## 👀 Checking the result
+## ⚠️ Notes
 
-After committing, you can monitor the workflow:
-
-1. Click the **Actions** tab in your repository
-2. Click the latest workflow run to see progress and logs
-3. Once it completes, go back to the **Code** tab and open the `downloads/` folder to find your files
-
----
-
-## Notes
-
-- URLs must be publicly accessible (no login required)
 - Separate multiple URLs with spaces
-- The workflow skips itself using `[skip ci]` in its own commit message to avoid infinite loops
-- If no valid `download:` or `download-zip:` command is found in the commit message, the workflow will exit without doing anything
+- Commit message contains `[skip ci]` → workflow skips itself
+- No valid command found → workflow exits silently
+- Spotify + Apple Music = blocked (DRM)
