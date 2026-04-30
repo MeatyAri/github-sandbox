@@ -262,7 +262,7 @@ jobs:
 
           if [ "$SIZE" -eq 0 ]; then
             echo "No archive, committing individual files in batches"
-            FILE_LIST=($(find . -type f -not -path './.git/*' 2>/dev/null | head -1000))
+            mapfile -d '' FILE_LIST < <(find . -type f -not -path './.git/*' 2>/dev/null | head -1000 | tr '\n' '\0')
             TOTAL=${#FILE_LIST[@]}
             if [ "$TOTAL" -eq 0 ]; then
               git add -f .
@@ -281,9 +281,9 @@ jobs:
           elif [ "$SIZE" -lt $((4 * 1024 * 1024 * 1024)) ]; then
             echo "Archive <4GB ($(( SIZE / 1024 / 1024 ))MB), committing to current repo"
 
-            PART_LIST=($(ls -1 *.part_* 2>/dev/null))
+            PART_LIST=( *.part_* )
             if [ ${#PART_LIST[@]} -eq 0 ]; then
-              PART_LIST=($(ls -1 *.tar.gz 2>/dev/null))
+              PART_LIST=( *.tar.gz )
             fi
 
             TOTAL=${#PART_LIST[@]}
@@ -305,7 +305,15 @@ jobs:
             echo "File >=4GB ($(( SIZE / 1024 / 1024 / 1024 ))GB), using large files pipeline"
             cd downloads
 
-            PART_COUNT=$(ls -1 *.part_* 2>/dev/null | wc -l)
+            PART_COUNT=0
+            for _p in *.part_*; do
+              [ -f "$_p" ] && PART_COUNT=$((PART_COUNT + 1))
+            done
+            if [ "$PART_COUNT" -eq 0 ]; then
+              for _p in *.tar.gz; do
+                [ -f "$_p" ] && PART_COUNT=$((PART_COUNT + 1))
+              done
+            fi
             if [ "$PART_COUNT" -eq 0 ]; then
               echo "No files to push"
               exit 0
@@ -323,13 +331,27 @@ jobs:
               mkdir -p "../$REPO_NAME"
 
               START=$(( (REPO_NUM - 1) * 50 ))
-              FILE_LIST=$(ls -1 *.part_* 2>/dev/null | tail -n +$((START + 1)) | head -50)
-              echo "$FILE_LIST" | xargs -I{} cpx {} "../$REPO_NAME/" 2>/dev/null || true
+              FILE_LIST=()
+              for _p in *.part_*; do
+                [ -f "$_p" ] || continue
+                FILE_LIST+=("$_p")
+              done
+              _idx=0
+              for _p in "${FILE_LIST[@]}"; do
+                _idx=$(( _idx + 1 ))
+                [ "$_idx" -gt "$START" ] || continue
+                [ "$_idx" -gt "$((START + 50))" ] && break
+                cpx "$_p" "../$REPO_NAME/" 2>/dev/null || true
+              done
 
               cd "../$REPO_NAME"
               git init
 
-              ALL_FILES=(*.part_*)
+              ALL_FILES=()
+              for _a in *.part_*; do
+                [ -f "$_a" ] || continue
+                ALL_FILES+=("$_a")
+              done
               TOTAL_FILES=${#ALL_FILES[@]}
 
               for ((i=0; i<TOTAL_FILES; i+=BATCH_SIZE)); do
