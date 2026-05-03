@@ -253,10 +253,12 @@ jobs:
 
       - name: Commit & Push
         run: |
+          set -eo pipefail
           SIZE=$(cat /tmp/archive_size.txt 2>/dev/null || echo 0)
           cd downloads
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git config --global init.defaultBranch main
 
           BATCH_SIZE=10
 
@@ -266,14 +268,21 @@ jobs:
             TOTAL=${#FILE_LIST[@]}
             if [ "$TOTAL" -eq 0 ]; then
               git add -f .
-              git commit --allow-empty -m "Download: $(date +%Y%m%d_%H%M%S) single file [skip ci]" || true
+              git commit --allow-empty -m "Download: $(date +%Y%m%d_%H%M%S) single file [skip ci]"
             else
               for ((batch=0; batch<TOTAL; batch+=BATCH_SIZE)); do
                 BATCH_NUM=$((batch / BATCH_SIZE + 1))
                 BATCH_LIST=("${FILE_LIST[@]:batch:BATCH_SIZE}")
                 git add -f "${BATCH_LIST[@]}"
-                git commit --no-verify -m "Download: $(date +%Y%m%d_%H%M%S) batch $BATCH_NUM/$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE )) [skip ci]" || true
-                git push origin HEAD:${{ github.ref_name }} --force
+                COMMIT_MSG="Download: $(date +%Y%m%d_%H%M%S) batch $BATCH_NUM/$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE )) [skip ci]"
+                if ! git commit --no-verify -m "$COMMIT_MSG"; then
+                  echo "ERROR: Commit failed"
+                  exit 1
+                fi
+                if ! git push origin HEAD:${{ github.ref_name }} --force; then
+                  echo "ERROR: Push failed"
+                  exit 1
+                fi
                 echo "✓ Pushed batch $BATCH_NUM/$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE )) ($BATCH_SIZE files) to ${{ github.repository }}"
               done
             fi
@@ -296,8 +305,15 @@ jobs:
               BATCH_NUM=$((batch / BATCH_SIZE + 1))
               BATCH_LIST=("${PART_LIST[@]:batch:BATCH_SIZE}")
               git add -f "${BATCH_LIST[@]}"
-              git commit --no-verify -m "Download: $(date +%Y%m%d_%H%M%S) batch $BATCH_NUM/$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE )) [skip ci]" || true
-              git push origin HEAD:${{ github.ref_name }} --force
+              COMMIT_MSG="Download: $(date +%Y%m%d_%H%M%S) batch $BATCH_NUM/$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE )) [skip ci]"
+              if ! git commit --no-verify -m "$COMMIT_MSG"; then
+                echo "ERROR: Commit failed"
+                exit 1
+              fi
+              if ! git push origin HEAD:${{ github.ref_name }} --force; then
+                echo "ERROR: Push failed"
+                exit 1
+              fi
               echo "✓ Pushed batch $BATCH_NUM/$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE )) to ${{ github.repository }}"
             done
 
@@ -346,6 +362,9 @@ jobs:
               cd "../$REPO_NAME"
               git init
 
+              # Create initial empty commit to establish the branch
+              git commit --allow-empty -m "Init [skip ci]" 2>/dev/null || true
+
               ALL_FILES=()
               for _a in *.part_*; do
                 [ -f "$_a" ] || continue
@@ -360,17 +379,39 @@ jobs:
                   [ -f "${ALL_FILES[$j]}" ] && git add -f "${ALL_FILES[$j]}"
                 done
 
-                git commit -m "Batch $BATCH_NUM [skip ci]" 2>/dev/null || true
-                git remote add origin "https://x-access-token:${{ secrets.CROSS_REPO_PAT }}@github.com/$OWNER/$REPO_NAME.git" 2>/dev/null || true
-                git push origin HEAD:main --force
+                if ! git commit -m "Batch $BATCH_NUM [skip ci]"; then
+                  echo "ERROR: Commit failed in $REPO_NAME"
+                  exit 1
+                fi
+                if ! git remote add origin "https://x-access-token:${{ secrets.CROSS_REPO_PAT }}@github.com/$OWNER/$REPO_NAME.git" 2>/dev/null; then
+                  true
+                fi
+                if ! git push -u origin main -f; then
+                  echo "ERROR: Push failed in $REPO_NAME"
+                  exit 1
+                fi
                 echo "✓ Pushed batch $BATCH_NUM ($BATCH_SIZE files) to $REPO_NAME"
               done
             }
 
+            PIDS=()
             for REPO_NUM in $(seq 1 $REPOS_NEEDED); do
               push_repo $REPO_NUM &
+              PIDS+=($!)
             done
-            wait
+            
+            # Wait for all background jobs and capture any failures
+            ALL_OK=0
+            for pid in "${PIDS[@]}"; do
+              if ! wait $pid; then
+                echo "ERROR: Background job $pid failed"
+                ALL_OK=1
+              fi
+            done
+            
+            if [ $ALL_OK -ne 0 ]; then
+              exit 1
+            fi
 
             echo "✅ Distributed to $OWNER/large-files-part-{1..$REPOS_NEEDED}"
           fi
