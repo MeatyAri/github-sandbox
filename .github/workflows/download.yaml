@@ -303,7 +303,6 @@ jobs:
 
           else
             echo "File >=4GB ($(( SIZE / 1024 / 1024 / 1024 ))GB), using large files pipeline"
-            cd downloads
 
             PART_COUNT=0
             for _p in *.part_*; do
